@@ -8,15 +8,17 @@ services:
       - ./:/var/www/html/
     depends_on:
       - db
+    env_file:
+      - .env # This injects the variables into your PHP server
   db:
     image: mysql:8.0
     ports:
       - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: frosty_bites
-      MYSQL_USER: frosty_user
-      MYSQL_PASSWORD: frosty_password
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql
 

@@ -1,0 +1,32 @@
+# --- Environment Variables ---
+# (Crucial for when you switch to a live database like Aiven)
+.env
+
+# --- Docker & Database ---
+# (Just in case you ever bind-mount your volume locally)
+db_data/
+mysql/
+*.sql.gz
+*.sql.zip
+
+# --- Logs ---
+*.log
+npm-debug.log*
+
+# --- OS Generated Files ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# --- IDEs and Editors ---
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -9,6 +9,8 @@ mysql/
 *.sql.gz
 *.sql.zip
 
+ca/*
+
 # --- Logs ---
 *.log
 npm-debug.log*

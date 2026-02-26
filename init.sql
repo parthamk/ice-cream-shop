@@ -1,3 +1,15 @@
+USE frosty_bites;
+
+CREATE TABLE admins (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL
+);
+
+-- Admin login 
+INSERT INTO admins (username, password_hash) 
+VALUES ('admin', '$2y$10$8v8mD6.Wp6rLzG9/S6zWveY6v5G3f8X7q8G9H0J1K2L3M4N5O6P7Q');
+
 CREATE TABLE categories (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(50) NOT NULL
@@ -40,5 +52,5 @@ INSERT INTO products (category_id, name, description, price, image_url) VALUES
 (2, 'Red Velvet Slice', 'Smooth cream cheese frosting.', 5.50, 'https://images.unsplash.com/photo-1616541823729-00fe0aacd32c?w=500&q=80'),
 (3, 'Butter Croissant', 'Flaky, buttery, and baked fresh.', 3.00, 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=500&q=80'),
 (3, 'Chocolate Éclair', 'Filled with vanilla custard.', 4.25, 'https://images.unsplash.com/photo-1612201142855-7873bc1661b4?w=500&q=80'),
-(4, 'Belgian Waffle', 'Topped with maple syrup and butter.', 6.50, 'https://images.unsplash.com/photo-1616709555072-418df2a5b062?w=500&q=80'),
+(4, 'Belgian Waffle', 'Topped with maple syrup and butter.', 6.50, 'https://images.unsplash.com/photo-1562376552-0d160a2f9fa4?w=500&q=80'),
 (4, 'Nutella Waffle', 'Smothered in rich hazelnut spread.', 7.50, 'https://images.unsplash.com/photo-1504113888839-1c8eb50233d3?w=500&q=80');

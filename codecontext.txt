@@ -1,0 +1,1343 @@
+ice-cream-shop/
+|
+-.gitignore
+|
+-admin.php
+|
+-checkout.php
+|
+-db.php
+|
+-docker-compose.yml
+|
+-Dockerfile
+|
+-index.php
+|
+-init.sql
+|
+-login.php
+|
+-logout.php
+|
+-process_order.php
+|
+-README.md
+|
+-script.js
+|
+-style.css
+|
+-tracking.php
+|
+-update_status.php
+
+ice-cream-shop/.gitignore:
+--------------------------
+# --- Environment Variables ---
+# (Crucial for when you switch to a live database like Aiven)
+.env
+
+# --- Docker & Database ---
+# (Just in case you ever bind-mount your volume locally)
+db_data/
+mysql/
+*.sql.gz
+*.sql.zip
+
+# --- Logs ---
+*.log
+npm-debug.log*
+
+# --- OS Generated Files ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# --- IDEs and Editors ---
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+ice-cream-shop/admin.php:
+-------------------------
+<?php
+session_start();
+
+// The Bouncer: Kick out anyone who isn't logged in
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    header("Location: login.php");
+    exit();
+}
+
+require 'db.php';
+
+// Fetch Quick Stats
+$statsQuery = $pdo->query("SELECT COUNT(id) AS total_orders, COALESCE(SUM(total_amount + tax + platform_fee), 0) AS total_revenue FROM orders");
+$stats = $statsQuery->fetch();
+
+// Fetch All Orders
+$ordersQuery = $pdo->query("SELECT * FROM orders ORDER BY created_at DESC");
+$orders = $ordersQuery->fetchAll();
+
+// Define available statuses
+$statuses = ['Pending', 'Preparing', 'Out for Delivery', 'Delivered'];
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard | Frosty Bites</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .admin-container { max-width: 1100px; margin: 3rem auto; padding: 0 5%; }
+        
+        /* Stats Cards */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 3rem; }
+        .stat-card { background: white; padding: 1.5rem; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); text-align: center; border-bottom: 5px solid var(--primary-color); }
+        .stat-card i { font-size: 2.5rem; color: var(--primary-color); margin-bottom: 10px; display: inline-block; }
+        .stat-card h3 { font-size: 1.2rem; color: #666; margin-bottom: 5px; }
+        .stat-card .value { font-size: 2rem; font-weight: bold; color: var(--text-dark); }
+        .stat-card.revenue { border-bottom-color: var(--secondary-color); }
+        .stat-card.revenue i { color: var(--secondary-color); }
+
+        /* Table */
+        .orders-table-wrapper { background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th, td { padding: 15px; border-bottom: 1px solid #eee; vertical-align: top; }
+        th { background-color: var(--bg-light); color: var(--text-dark); font-weight: bold; }
+        tr:hover { background-color: #fcfcfc; }
+        
+        .item-list { list-style: none; margin: 0; padding: 0; font-size: 0.9rem; color: #555; }
+        .item-list li { margin-bottom: 5px; }
+        .item-list li::before { content: "• "; color: var(--primary-color); font-weight: bold; }
+        
+        .badge { padding: 5px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; }
+        .badge-upi { background: #e0f7fa; color: #00838f; }
+        .badge-card { background: #fff3e0; color: #ef6c00; }
+
+        /* Status Dropdown */
+        .status-select { padding: 5px; border-radius: 5px; border: 1px solid #ccc; font-weight: bold; cursor: pointer; outline: none; transition: 0.3s; }
+        .status-select:focus { border-color: var(--primary-color); box-shadow: 0 0 5px rgba(255, 182, 193, 0.5); }
+        
+        /* Toast Notification */
+        #toast { visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center; border-radius: 5px; padding: 15px; position: fixed; z-index: 1; bottom: 30px; left: 50%; transform: translateX(-50%); }
+        #toast.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
+        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo"><i class="bi bi-shield-lock"></i> Frosty Bites Admin</div>
+        <nav class="nav-links">
+            <a href="index.php"><i class="bi bi-shop"></i> View Live Site</a>
+            <a href="logout.php" style="color: #e74c3c;"><i class="bi bi-box-arrow-right"></i> Logout</a>
+        </nav>
+    </header>
+
+    <div class="admin-container">
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <i class="bi bi-receipt"></i>
+                <h3>Total Orders</h3>
+                <div class="value"><?php echo $stats['total_orders']; ?></div>
+            </div>
+            <div class="stat-card revenue">
+                <i class="bi bi-graph-up-arrow"></i>
+                <h3>Total Revenue</h3>
+                <div class="value">$<?php echo number_format($stats['total_revenue'], 2); ?></div>
+            </div>
+        </div>
+
+        <div class="orders-table-wrapper">
+            <h2 style="margin-bottom: 1.5rem; color: var(--primary-color);">Manage Orders</h2>
+            
+            <?php if (count($orders) > 0): ?>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Order ID</th>
+                            <th>Date & Time</th>
+                            <th>Items Ordered</th>
+                            <th>Status</th>
+                            <th>Total Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($orders as $order): ?>
+                            <tr>
+                                <td><strong>#FB-<?php echo $order['id']; ?></strong></td>
+                                <td><?php echo date('M d, Y g:i A', strtotime($order['created_at'])); ?></td>
+                                
+                                <td>
+                                    <ul class="item-list">
+                                        <?php
+                                        $stmtItems = $pdo->prepare("SELECT quantity, product_name FROM order_items WHERE order_id = ?");
+                                        $stmtItems->execute([$order['id']]);
+                                        $items = $stmtItems->fetchAll();
+                                        foreach ($items as $item) {
+                                            echo "<li>{$item['quantity']}x " . htmlspecialchars($item['product_name']) . "</li>";
+                                        }
+                                        ?>
+                                    </ul>
+                                </td>
+                                
+                                <td>
+                                    <select class="status-select" data-order-id="<?php echo $order['id']; ?>">
+                                        <?php foreach ($statuses as $status): ?>
+                                            <option value="<?php echo $status; ?>" <?php echo ($order['status'] === $status) ? 'selected' : ''; ?>>
+                                                <?php echo $status; ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </td>
+                                
+                                <td><strong>$<?php echo number_format($order['total_amount'] + $order['tax'] + $order['platform_fee'], 2); ?></strong></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php else: ?>
+                <p style="text-align: center; color: #888; padding: 2rem 0;">No orders have been placed yet.</p>
+            <?php endif; ?>
+        </div>
+
+    </div>
+
+    <div id="toast">Status updated successfully!</div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const dropdowns = document.querySelectorAll('.status-select');
+            const toast = document.getElementById('toast');
+
+            dropdowns.forEach(dropdown => {
+                dropdown.addEventListener('change', function() {
+                    const orderId = this.getAttribute('data-order-id');
+                    const newStatus = this.value;
+
+                    // Disable dropdown while saving
+                    this.disabled = true;
+
+                    fetch('update_status.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ order_id: orderId, status: newStatus })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        this.disabled = false; // Re-enable
+                        if (data.success) {
+                            // Show success toast
+                            toast.className = "show";
+                            setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
+                        } else {
+                            alert('Failed to update status: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        this.disabled = false;
+                        alert('A network error occurred.');
+                    });
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+
+
+ice-cream-shop/checkout.php:
+----------------------------
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout | Frosty Bites</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo"><i class="bi bi-shop"></i> Frosty Bites</div>
+        <nav class="nav-links"><a href="index.php">Back to Menu</a></nav>
+    </header>
+
+    <section class="checkout-section">
+        <h2 style="margin-bottom: 20px; color: #ff6b81; text-align:center;">Order Summary</h2>
+        <div id="checkout-items"></div>
+        
+        <div class="price-breakdown">
+            <p>Subtotal: $<span id="subtotal">0.00</span></p>
+            <p>Tax (5%): $<span id="tax">0.00</span></p>
+            <p>Platform Fee: $<span id="platform-fee">1.50</span></p>
+            <h3>Total: $<span id="total-price">0.00</span></h3>
+        </div>
+
+        <div class="payment-section">
+            <h3 style="margin-bottom: 15px;">Select Payment Method</h3>
+            <label><input type="radio" name="payment" value="upi"> Pay via UPI</label>
+            <label><input type="radio" name="payment" value="card"> Credit/Debit Card</label>
+            
+            <div id="payment-details" class="hidden"></div>
+        </div>
+
+        <button id="complete-order-btn" class="btn btn-disabled" disabled>Complete Order</button>
+    </section>
+
+    <footer>
+        <p>&copy; <?php echo date("Y"); ?> Frosty Bites. All rights reserved.</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
+ice-cream-shop/db.php:
+----------------------
+<?php
+// Fetch credentials from Render Environment Variables
+$host = getenv('DB_HOST');
+$dbname = getenv('DB_DATABASE');
+$user = getenv('DB_USERNAME');
+$pass = getenv('DB_PASSWORD');
+$port = "23238"; // Standard Aiven MySQL port
+
+try {
+    // Added port and SSL requirement for Aiven
+    $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8";
+    $options = [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::MYSQL_ATTR_SSL_CA       => true, // Required for Aiven
+    ];
+
+    $pdo = new PDO($dsn, $user, $pass, $options);
+} catch (PDOException $e) {
+    // Only show detailed errors during debugging; hide them in production!
+    die("Database Connection failed: " . $e->getMessage());
+}
+?>
+
+
+ice-cream-shop/docker-compose.yml:
+----------------------------------
+version: '3.8'
+services:
+  web:
+    build: .
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/var/www/html/
+    depends_on:
+      - db
+    env_file:
+      - .env # This injects the variables into your PHP server
+  db:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+
+volumes:
+  db_data:
+
+ice-cream-shop/Dockerfile:
+--------------------------
+FROM php:8.2-apache
+
+# Install PDO MySQL extension
+RUN docker-php-ext-install pdo pdo_mysql
+
+# Set the working directory
+WORKDIR /var/www/html
+
+# Copy all files from your current directory into the container
+# This ensures index.php is at /var/www/html/index.php
+COPY . /var/www/html/
+
+# Grant permissions so Apache can read the files
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 755 /var/www/html
+
+# Enable Apache rewrite module (useful for clean URLs later)
+RUN a2enmod rewrite
+
+# Expose port 80
+EXPOSE 80
+
+CMD ["apache2-foreground"]
+
+ice-cream-shop/index.php:
+-------------------------
+<?php
+require 'db.php';
+$stmtCategories = $pdo->query("SELECT * FROM categories");
+$categories = $stmtCategories->fetchAll();
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frosty Bites | Ice Cream & Bakery</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo"><i class="bi bi-shop"></i> Frosty Bites</div>
+        <nav class="nav-links">
+            <a href="#home">Home</a>
+            <a href="#menu">Menu</a>
+            <div class="cart-wrapper">
+                <div id="cart-icon"><i class="bi bi-cart3"></i> <span id="cart-count">0</span></div>
+                <div id="cart-dropdown" class="hidden">
+                    <div id="cart-items"></div>
+                    <button id="place-order-btn" class="btn hidden" onclick="window.location.href='checkout.php'">Place Order</button>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <section id="home" class="hero">
+        <div class="hero-content">
+            <h1>Scoops of Happiness</h1>
+            <p>Handcrafted, artisanal desserts made locally. Taste the joy in every bite!</p>
+            <a href="#menu" class="btn" style="margin-top: 10px;">Explore Menu</a>
+        </div>
+    </section>
+
+    <section id="menu" class="menu-section">
+        <?php foreach ($categories as $category): ?>
+            <h2 style="margin-top: 3rem; color: var(--primary-color); border-bottom: 2px solid #eee; padding-bottom: 10px;">
+                Our <?php echo htmlspecialchars($category['name']); ?>
+            </h2>
+            <div class="grid-container">
+                <?php
+                $stmtProducts = $pdo->prepare("SELECT * FROM products WHERE category_id = :cat_id");
+                $stmtProducts->execute(['cat_id' => $category['id']]);
+                $products = $stmtProducts->fetchAll();
+                
+                if (count($products) > 0):
+                    foreach ($products as $product): 
+                ?>
+                        <div class="card">
+                            <img src="<?php echo htmlspecialchars($product['image_url']); ?>" alt="<?php echo htmlspecialchars($product['name']); ?>">
+                            <h3><?php echo htmlspecialchars($product['name']); ?></h3>
+                            <p style="font-size: 0.9rem; color: #666; margin-bottom: 10px;"><?php echo htmlspecialchars($product['description']); ?></p>
+                            <p class="price">$<?php echo number_format($product['price'], 2); ?></p>
+                            
+                            <div class="card-actions">
+                                <button class="btn-small add-to-cart" 
+                                        data-name="<?php echo htmlspecialchars($product['name']); ?>" 
+                                        data-price="<?php echo htmlspecialchars($product['price']); ?>" 
+                                        data-img="<?php echo htmlspecialchars($product['image_url']); ?>">
+                                    Add to Order
+                                </button>
+                                <span class="item-qty-badge" id="badge-<?php echo str_replace(' ', '-', htmlspecialchars($product['name'])); ?>"></span>
+                            </div>
+                        </div>
+                <?php 
+                    endforeach; 
+                else: 
+                ?>
+                    <p style="text-align: center; width: 100%; color: #888;">More items coming soon!</p>
+                <?php endif; ?>
+            </div>
+        <?php endforeach; ?>
+    </section>
+
+    <footer>
+        <p>&copy; <?php echo date("Y"); ?> Frosty Bites. All rights reserved.</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
+
+ice-cream-shop/init.sql:
+------------------------
+CREATE TABLE categories (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL
+);
+
+CREATE TABLE products (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    category_id INT,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    price DECIMAL(10, 2) NOT NULL,
+    image_url VARCHAR(255),
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+);
+
+CREATE TABLE orders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    total_amount DECIMAL(10, 2) NOT NULL,
+    tax DECIMAL(10, 2) NOT NULL,
+    platform_fee DECIMAL(10, 2) NOT NULL DEFAULT 1.50,
+    payment_method VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE order_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT,
+    product_name VARCHAR(100) NOT NULL,
+    quantity INT NOT NULL,
+    price DECIMAL(10, 2) NOT NULL,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+);
+
+INSERT INTO categories (name) VALUES ('Ice Cream'), ('Cakes'), ('Pastries'), ('Waffles');
+
+INSERT INTO products (category_id, name, description, price, image_url) VALUES 
+(1, 'Classic Vanilla', 'Rich and creamy.', 3.99, 'https://images.unsplash.com/photo-1688841914419-482222767a22?w=500&q=80'),
+(1, 'Strawberry Bliss', 'Made with fresh strawberries.', 4.50, 'https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?w=500&q=80'),
+(2, 'Black Forest Cake', 'Chocolate sponge with cherry filling.', 25.00, 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=500&q=80'),
+(2, 'Red Velvet Slice', 'Smooth cream cheese frosting.', 5.50, 'https://images.unsplash.com/photo-1616541823729-00fe0aacd32c?w=500&q=80'),
+(3, 'Butter Croissant', 'Flaky, buttery, and baked fresh.', 3.00, 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=500&q=80'),
+(3, 'Chocolate Éclair', 'Filled with vanilla custard.', 4.25, 'https://images.unsplash.com/photo-1612201142855-7873bc1661b4?w=500&q=80'),
+(4, 'Belgian Waffle', 'Topped with maple syrup and butter.', 6.50, 'https://images.unsplash.com/photo-1616709555072-418df2a5b062?w=500&q=80'),
+(4, 'Nutella Waffle', 'Smothered in rich hazelnut spread.', 7.50, 'https://images.unsplash.com/photo-1504113888839-1c8eb50233d3?w=500&q=80');
+
+ice-cream-shop/login.php:
+-------------------------
+<?php
+session_start();
+require 'db.php';
+
+// Auto-create a default admin if the table is completely empty
+$stmtCheck = $pdo->query("SELECT COUNT(*) FROM admins");
+if ($stmtCheck->fetchColumn() == 0) {
+    $defaultHash = password_hash('admin123', PASSWORD_DEFAULT);
+    $pdo->query("INSERT INTO admins (username, password_hash) VALUES ('admin', '$defaultHash')");
+}
+
+$error = '';
+
+// Handle form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $username = trim($_POST['username']);
+    $password = $_POST['password'];
+
+    $stmt = $pdo->prepare("SELECT * FROM admins WHERE username = ?");
+    $stmt->execute([$username]);
+    $admin = $stmt->fetch();
+
+    // Verify the hashed password
+    if ($admin && password_verify($password, $admin['password_hash'])) {
+        // Create session variables
+        $_SESSION['admin_logged_in'] = true;
+        $_SESSION['admin_username'] = $admin['username'];
+        
+        header("Location: admin.php");
+        exit();
+    } else {
+        $error = "Invalid username or password.";
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login | Frosty Bites</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .login-container { max-width: 400px; margin: 10vh auto; background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); text-align: center; }
+        .login-container h2 { color: var(--primary-color); margin-bottom: 1.5rem; }
+        .login-container i.bi-shield-lock { font-size: 3rem; color: var(--primary-color); }
+        .form-group { margin-bottom: 1.5rem; text-align: left; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: bold; color: var(--text-dark); }
+        .form-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; outline: none; }
+        .form-group input:focus { border-color: var(--primary-color); }
+        .btn-login { width: 100%; padding: 10px; font-size: 1.1rem; }
+        .error-message { color: #e74c3c; background: #fadbd8; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <i class="bi bi-shield-lock"></i>
+        <h2>Admin Login</h2>
+        
+        <?php if ($error): ?>
+            <div class="error-message"><?php echo $error; ?></div>
+        <?php endif; ?>
+
+        <form method="POST" action="login.php">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit" class="btn btn-login">Login</button>
+        </form>
+        <p style="margin-top: 15px; font-size: 0.8rem; color: #888;">Default login: admin / admin123</p>
+    </div>
+</body>
+</html>
+
+
+ice-cream-shop/logout.php:
+--------------------------
+<?php
+session_start();
+// Destroy all session data
+$_SESSION = array();
+session_destroy();
+
+// Redirect back to login page
+header("Location: login.php");
+exit();
+?>
+
+
+ice-cream-shop/process_order.php:
+---------------------------------
+<?php
+require 'db.php';
+
+// Get the JSON payload from the JavaScript Fetch API
+$json = file_get_contents('php://input');
+$data = json_decode($json, true);
+
+if ($data && isset($data['cart'])) {
+    try {
+        // Begin a database transaction
+        $pdo->beginTransaction();
+
+        // 1. Insert into Orders table
+        $stmtOrder = $pdo->prepare("INSERT INTO orders (total_amount, tax, platform_fee, payment_method) VALUES (?, ?, ?, ?)");
+        $stmtOrder->execute([$data['total'], $data['tax'], 1.50, $data['paymentMethod']]);
+        
+        // Get the ID of the order we just created
+        $orderId = $pdo->lastInsertId();
+
+        // 2. Insert into Order Items table
+        $stmtItem = $pdo->prepare("INSERT INTO order_items (order_id, product_name, quantity, price) VALUES (?, ?, ?, ?)");
+        
+        foreach ($data['cart'] as $item) {
+            $stmtItem->execute([$orderId, $item['name'], $item['qty'], $item['price']]);
+        }
+
+        // Commit transaction
+        $pdo->commit();
+        
+        // Send success response back to JavaScript
+        echo json_encode(['success' => true, 'order_id' => $orderId]);
+
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+} else {
+    echo json_encode(['success' => false, 'error' => 'Invalid data received']);
+}
+?>
+
+
+ice-cream-shop/README.md:
+-------------------------
+��#   i c e - c r e a m - s h o p  
+ 
+
+ice-cream-shop/script.js:
+-------------------------
+document.addEventListener('DOMContentLoaded', () => {
+    let cart = JSON.parse(localStorage.getItem('iceCreamCart')) || {};
+    let currentSubtotal = 0;
+    let currentTax = 0;
+    let currentTotal = 0;
+    
+    const cartIcon = document.getElementById('cart-icon');
+    const cartDropdown = document.getElementById('cart-dropdown');
+    const currentPage = window.location.pathname;
+
+    function saveCart() {
+        localStorage.setItem('iceCreamCart', JSON.stringify(cart));
+        updateCartUI();
+    }
+
+    function updateCartUI() {
+        const totalItems = Object.values(cart).reduce((sum, item) => sum + item.qty, 0);
+        const cartCountEl = document.getElementById('cart-count');
+        if (cartCountEl) cartCountEl.textContent = totalItems;
+
+        document.querySelectorAll('.item-qty-badge').forEach(badge => badge.textContent = '');
+        for (const [name, item] of Object.entries(cart)) {
+            const formattedName = name.replace(/ /g, '-');
+            const badge = document.getElementById(`badge-${formattedName}`);
+            if (badge && item.qty > 0) badge.textContent = `x${item.qty}`;
+        }
+
+        renderCartDropdown();
+        if (currentPage.includes('checkout.php')) renderCheckout();
+    }
+
+    function renderCartDropdown() {
+        const cartItemsContainer = document.getElementById('cart-items');
+        const placeOrderBtn = document.getElementById('place-order-btn');
+        if (!cartItemsContainer) return;
+
+        cartItemsContainer.innerHTML = '';
+        const items = Object.values(cart);
+
+        if (items.length === 0) {
+            cartItemsContainer.innerHTML = '<p style="text-align:center;">Your cart is empty.</p>';
+            placeOrderBtn.classList.add('hidden');
+            return;
+        }
+
+        placeOrderBtn.classList.remove('hidden');
+        placeOrderBtn.style.width = '100%';
+        placeOrderBtn.style.marginTop = '10px';
+
+        items.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'cart-item';
+            div.innerHTML = `
+                <img src="${item.img}" alt="${item.name}">
+                <div class="cart-item-details">
+                    <strong>${item.name}</strong><br>$${parseFloat(item.price).toFixed(2)}
+                </div>
+                <div class="cart-controls">
+                    <button onclick="changeQty('${item.name}', -1)"><i class="bi bi-dash"></i></button>
+                    <span>${item.qty}</span>
+                    <button onclick="changeQty('${item.name}', 1)"><i class="bi bi-plus"></i></button>
+                </div>
+            `;
+            cartItemsContainer.appendChild(div);
+        });
+    }
+
+    window.changeQty = function(name, delta) {
+        if (cart[name]) {
+            cart[name].qty += delta;
+            if (cart[name].qty <= 0) delete cart[name];
+            saveCart();
+        }
+    };
+
+    if (cartIcon) {
+        cartIcon.addEventListener('click', () => { cartDropdown.classList.toggle('hidden'); });
+    }
+
+    document.querySelectorAll('.add-to-cart').forEach(button => {
+        button.addEventListener('click', function() {
+            const name = this.getAttribute('data-name');
+            const price = parseFloat(this.getAttribute('data-price'));
+            const img = this.getAttribute('data-img');
+
+            if (!cart[name]) {
+                cart[name] = { name, price, img, qty: 1 };
+            } else { cart[name].qty += 1; }
+            saveCart();
+            if (cartDropdown.classList.contains('hidden')) { cartDropdown.classList.remove('hidden'); }
+        });
+    });
+
+    function renderCheckout() {
+        const checkoutItems = document.getElementById('checkout-items');
+        if (!checkoutItems) return;
+
+        checkoutItems.innerHTML = '';
+        currentSubtotal = 0;
+
+        Object.values(cart).forEach(item => {
+            const itemTotal = item.price * item.qty;
+            currentSubtotal += itemTotal;
+            checkoutItems.innerHTML += `
+                <div class="cart-item" style="border-bottom: 1px solid #ddd; padding: 10px 0;">
+                    <div style="flex-grow: 1; text-align: left;"><strong>${item.qty}x ${item.name}</strong></div>
+                    <div>$${itemTotal.toFixed(2)}</div>
+                </div>
+            `;
+        });
+
+        currentTax = currentSubtotal * 0.05;
+        const platformFee = 1.50;
+        currentTotal = currentSubtotal + currentTax + platformFee;
+
+        document.getElementById('subtotal').textContent = currentSubtotal.toFixed(2);
+        document.getElementById('tax').textContent = currentTax.toFixed(2);
+        document.getElementById('total-price').textContent = currentTotal.toFixed(2);
+    }
+
+    const paymentRadios = document.querySelectorAll('input[name="payment"]');
+    const paymentDetails = document.getElementById('payment-details');
+    const completeBtn = document.getElementById('complete-order-btn');
+
+    paymentRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            paymentDetails.classList.remove('hidden');
+            if (this.value === 'upi') {
+                paymentDetails.innerHTML = `<div class="dummy-details">Selected UPI:<br><strong>abcd@bank.upi</strong></div>`;
+            } else if (this.value === 'card') {
+                paymentDetails.innerHTML = `<div class="dummy-details">Selected Card:<br><strong>1111 2222 3333 4444</strong><br>Exp: 12/30 | CVV: 888</div>`;
+            }
+            if (completeBtn && Object.keys(cart).length > 0) {
+                completeBtn.disabled = false;
+                completeBtn.classList.remove('btn-disabled');
+                completeBtn.classList.add('btn-green');
+            }
+        });
+    });
+
+    if (completeBtn) {
+        completeBtn.addEventListener('click', () => {
+            // Change button text to show it's processing
+            completeBtn.textContent = 'Processing...';
+            completeBtn.disabled = true;
+
+            const selectedPayment = document.querySelector('input[name="payment"]:checked').value;
+            
+            // Build the data payload to send to PHP
+            const orderData = {
+                cart: Object.values(cart),
+                total: currentTotal,
+                tax: currentTax,
+                paymentMethod: selectedPayment
+            };
+
+            // Send to database
+            fetch('process_order.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(orderData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.success) {
+                    // Wipe the cart and redirect to tracking with the database Order ID
+                    localStorage.removeItem('iceCreamCart');
+                    window.location.href = 'tracking.php?order_id=' + data.order_id;
+                } else {
+                    alert('Error saving order: ' + data.error);
+                    completeBtn.textContent = 'Complete Order';
+                    completeBtn.disabled = false;
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+    }
+
+    updateCartUI();
+});
+
+ice-cream-shop/style.css:
+-------------------------
+:root {
+  --primary-color: #ffb6c1;
+  /* Pastel Pink */
+  --secondary-color: #98ff98;
+  /* Mint Green */
+  --text-dark: #333;
+  --bg-light: #fffaf0;
+  /* Floral White */
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+  background-color: var(--bg-light);
+  color: var(--text-dark);
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 5%;
+  background: white;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+}
+
+.nav-links a {
+  text-decoration: none;
+  color: var(--text-dark);
+  margin-left: 1.5rem;
+  font-weight: 500;
+  transition: color 0.3s;
+}
+
+.nav-links a:hover {
+  color: var(--primary-color);
+}
+
+/* --- Hero Section --- */
+.hero {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.7)),
+    url("https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?w=1200&q=80")
+      center/cover;
+}
+
+.hero h1 {
+  font-size: 4rem;
+  color: #ff6b81;
+  margin-bottom: 1rem;
+}
+
+/* --- Buttons --- */
+.btn {
+  display: inline-block;
+  padding: 10px 25px;
+  background-color: var(--primary-color);
+  color: white;
+  text-decoration: none;
+  border: none;
+  border-radius: 25px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition:
+    transform 0.2s,
+    background-color 0.2s;
+}
+
+.btn:hover {
+  transform: translateY(-3px);
+  background-color: #ff9eaa;
+}
+
+.btn-small {
+  padding: 8px 15px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-small:hover {
+  background-color: #ff9eaa;
+}
+
+/* --- Menu Grid --- */
+.menu-section {
+  padding: 4rem 5%;
+  text-align: center;
+}
+
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 15px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s;
+}
+
+.card:hover {
+  transform: scale(1.03);
+}
+
+.card img {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.card h3 {
+  margin: 1rem 0 0.5rem;
+}
+
+.price {
+  font-size: 1.2rem;
+  color: var(--secondary-color);
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
+
+/* --- Cart & Badges --- */
+.cart-wrapper {
+  position: relative;
+  cursor: pointer;
+  margin-left: 1.5rem;
+}
+
+#cart-icon {
+  font-size: 1.5rem;
+  position: relative;
+}
+
+#cart-count {
+  position: absolute;
+  top: -10px;
+  right: -15px;
+  background: #ff6b81;
+  color: white;
+  border-radius: 50%;
+  padding: 2px 6px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+#cart-dropdown {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  width: 320px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  padding: 1rem;
+  z-index: 200;
+  cursor: default;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.cart-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.cart-item img {
+  width: 40px;
+  height: 40px;
+  border-radius: 5px;
+  object-fit: cover;
+}
+
+.cart-item-details {
+  flex-grow: 1;
+  margin-left: 10px;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.cart-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cart-controls button {
+  background: #eee;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.cart-controls button:hover {
+  background: var(--secondary-color);
+}
+
+.card-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+.item-qty-badge {
+  font-weight: bold;
+  color: #ff6b81;
+  font-size: 1.1rem;
+  min-width: 20px;
+}
+
+/* --- Checkout & Tracking Pages --- */
+.checkout-section,
+.tracking-section {
+  max-width: 600px;
+  margin: 3rem auto;
+  background: white;
+  padding: 2rem;
+  border-radius: 15px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+}
+
+.price-breakdown {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: var(--bg-light);
+  border-radius: 10px;
+  text-align: right;
+}
+
+.price-breakdown h3 {
+  margin-top: 10px;
+  border-top: 2px solid #ddd;
+  padding-top: 10px;
+}
+
+.payment-section {
+  margin-bottom: 2rem;
+  text-align: left;
+}
+
+.payment-section label {
+  display: block;
+  margin: 15px 0;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+.dummy-details {
+  background: #f4f4f4;
+  padding: 1rem;
+  border-radius: 5px;
+  margin-top: 10px;
+  font-family: monospace;
+  border-left: 4px solid var(--primary-color);
+  font-size: 1rem;
+}
+
+#complete-order-btn {
+  width: 100%;
+  font-size: 1.2rem;
+  margin-top: 1rem;
+  padding: 15px;
+}
+
+.btn-disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  color: #666;
+}
+
+.btn-disabled:hover {
+  transform: none;
+  background-color: #ccc;
+}
+
+.btn-green {
+  background-color: #2ecc71;
+  color: white;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-green:hover {
+  background-color: #27ae60;
+  transform: translateY(-3px);
+}
+
+.tracking-status {
+  margin: 2rem 0;
+  text-align: left;
+}
+
+.step {
+  padding: 15px;
+  margin: 10px 0;
+  background: #eee;
+  border-radius: 5px;
+  color: #888;
+  transition: 0.3s;
+}
+
+.step.active {
+  background: var(--secondary-color);
+  color: var(--text-dark);
+  font-weight: bold;
+  border-left: 5px solid #2ecc71;
+}
+
+.mt-2 {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+footer {
+  text-align: center;
+  padding: 2rem;
+  background: var(--text-dark);
+  color: white;
+  margin-top: 2rem;
+}
+
+ice-cream-shop/tracking.php:
+----------------------------
+<?php
+require 'db.php'; // Connect to the database
+
+// Safely get the order ID from the URL
+$order_id = isset($_GET['order_id']) ? intval($_GET['order_id']) : 0;
+$status = 'Pending'; // Default status
+
+// Fetch the current status from the database
+if ($order_id > 0) {
+    $stmt = $pdo->prepare("SELECT status FROM orders WHERE id = ?");
+    $stmt->execute([$order_id]);
+    $order = $stmt->fetch();
+    
+    if ($order) {
+        $status = $order['status'];
+    } else {
+        die("<h2 style='text-align:center; padding: 50px;'>Order not found!</h2>");
+    }
+} else {
+    // If someone visits tracking.php without an ID, send them back to the menu
+    header("Location: index.php");
+    exit();
+}
+
+// Logic to determine which steps should light up in the UI
+$step1_active = true; // Order placed is always active
+$step2_active = in_array($status, ['Preparing', 'Out for Delivery', 'Delivered']);
+$step3_active = in_array($status, ['Out for Delivery', 'Delivered']);
+$step4_active = ($status === 'Delivered');
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <?php if ($status !== 'Delivered'): ?>
+        <meta http-equiv="refresh" content="10">
+    <?php endif; ?>
+    <title>Order Tracking | Frosty Bites</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo"><i class="bi bi-shop"></i> Frosty Bites</div>
+        <nav class="nav-links"><a href="index.php">Back to Home</a></nav>
+    </header>
+
+    <section class="tracking-section">
+        <h2 style="color: var(--primary-color); text-align:center; margin-bottom: 2rem;">Order Tracking</h2>
+        
+        <div class="tracking-status">
+            <div class="step <?php echo $step1_active ? 'active' : ''; ?>">
+                <i class="bi bi-card-checklist"></i> Order Placed
+            </div>
+            <div class="step <?php echo $step2_active ? 'active' : ''; ?>">
+                <i class="bi bi-box-seam"></i> Preparing Goodies
+            </div>
+            <div class="step <?php echo $step3_active ? 'active' : ''; ?>">
+                <i class="bi bi-truck"></i> Out for Delivery
+            </div>
+            <div class="step <?php echo $step4_active ? 'active' : ''; ?>">
+                <i class="bi bi-check-circle-fill"></i> Delivered
+            </div>
+        </div>
+        
+        <div class="mt-2" style="text-align: center; margin-top: 3rem;">
+            <p style="font-size: 1.1rem;">
+                Tracking ID: <strong style="color: var(--primary-color);">#FB-<?php echo $order_id; ?></strong>
+            </p>
+            <p style="color: #666; font-size: 0.9rem; margin-top: 10px;">
+                <?php 
+                if ($status === 'Delivered') {
+                    echo "Enjoy your treats! This page will no longer auto-refresh.";
+                } else {
+                    echo "Checking for updates automatically...";
+                }
+                ?>
+            </p>
+        </div>
+    </section>
+
+    <footer>
+        <p>&copy; <?php echo date("Y"); ?> Frosty Bites. All rights reserved.</p>
+    </footer>
+</body>
+</html>
+
+
+ice-cream-shop/update_status.php:
+---------------------------------
+<?php
+session_start();
+
+// Block unauthorized API requests
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    echo json_encode(['success' => false, 'error' => 'Unauthorized access']);
+    exit();
+}
+
+require 'db.php';
+
+// Get JSON payload
+$json = file_get_contents('php://input');
+$data = json_decode($json, true);
+
+if ($data && isset($data['order_id']) && isset($data['status'])) {
+    try {
+        $stmt = $pdo->prepare("UPDATE orders SET status = ? WHERE id = ?");
+        $stmt->execute([$data['status'], $data['order_id']]);
+        
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+} else {
+    echo json_encode(['success' => false, 'error' => 'Invalid data']);
+}
+?>
+
+

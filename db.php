@@ -1,23 +1,22 @@
 <?php
-// Fetch credentials from Render Environment Variables
+// We use getenv() so we can change settings in Render without touching the code again!
 $host = getenv('DB_HOST');
-$dbname = getenv('DB_DATABASE');
+$dbname = getenv('DB_DATABASE'); // This will be 'frosty_bites'
 $user = getenv('DB_USERNAME');
 $pass = getenv('DB_PASSWORD');
-$port = "23238"; // Standard Aiven MySQL port
+$port = "4000"; // TiDB always uses port 4000
 
 try {
-    // Added port and SSL requirement for Aiven
     $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8";
     $options = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::MYSQL_ATTR_SSL_CA       => true, // Required for Aiven
+        PDO::MYSQL_ATTR_SSL_CA       => true, // TiDB Cloud REQUIRES this "Safety Lock"
     ];
 
     $pdo = new PDO($dsn, $user, $pass, $options);
 } catch (PDOException $e) {
-    // Only show detailed errors during debugging; hide them in production!
+    // This tells you exactly what went wrong if it fails
     die("Database Connection failed: " . $e->getMessage());
 }
 ?>

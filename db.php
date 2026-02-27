@@ -6,6 +6,9 @@ $user = getenv('DB_USERNAME');
 $pass = getenv('DB_PASSWORD');
 $port = "4000"; // TiDB always uses port 4000
 
+// Path to CA certificate for SSL connection
+$ca_cert = __DIR__ . '/certs/isrgrootx1.pem';
+
 try {
     $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8";
     $options = [

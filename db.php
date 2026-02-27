@@ -11,13 +11,15 @@ try {
     $options = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        // PDO::MYSQL_ATTR_SSL_CA       => true, //TiDB Cloud REQUIRES this "Safety Lock"
-        PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false,
+        // We force SSL to be REQUIRED
+        PDO::MYSQL_ATTR_SSL_CA       => true,
+        // We tell PHP to use the system's built-in certificates to verify
+        PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => true,
     ];
 
     $pdo = new PDO($dsn, $user, $pass, $options);
 } catch (PDOException $e) {
-    // This tells you exactly what went wrong if it fails
     die("Database Connection failed: " . $e->getMessage());
 }
 ?>
+

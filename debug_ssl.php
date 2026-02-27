@@ -1,4 +1,13 @@
 <?php
+session_start();
+
+// The Bouncer: Kick out anyone who isn't logged in
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    header("Location: login.php");
+    exit();
+}
+?>
+<?php
 echo "<h2>Frosty Bites - Connection Debugger</h2>";
 
 echo "<h3>1. SSL & Environment Setup</h3>";

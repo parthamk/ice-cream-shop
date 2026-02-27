@@ -71,6 +71,9 @@ $statuses = ['Pending', 'Preparing', 'Out for Delivery', 'Delivered'];
         <div class="logo"><i class="bi bi-shield-lock"></i> Frosty Bites Admin</div>
         <nav class="nav-links">
             <a href="index.php"><i class="bi bi-shop"></i> View Live Site</a>
+
+            <a href="debug_ssl.php" style="color: #2ecc71;"><i class="bi bi-cpu"></i> System Health</a>
+            
             <a href="logout.php" style="color: #e74c3c;"><i class="bi bi-box-arrow-right"></i> Logout</a>
         </nav>
     </header>

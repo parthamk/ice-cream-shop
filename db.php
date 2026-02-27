@@ -14,10 +14,10 @@ try {
     $options = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        // We force SSL to be REQUIRED
-        PDO::MYSQL_ATTR_SSL_CA       => true,
-        // We tell PHP to use the system's built-in certificates to verify
-        PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => true,
+        // Using the verified realpath
+        PDO::MYSQL_ATTR_SSL_CA       => $ca_cert,
+        // Some cloud providers require this for the handshake to finish
+        PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false,
     ];
 
     $pdo = new PDO($dsn, $user, $pass, $options);

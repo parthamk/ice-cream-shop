@@ -1,7 +1,7 @@
 FROM php:8.2-apache
 
-# Install PDO MySQL extension
-RUN docker-php-ext-install pdo pdo_mysql
+# Install PDO MySQL AND OpenSSL
+RUN apt-get update && apt-get install -y libssl-dev && docker-php-ext-install pdo pdo_mysql
 
 # Set the working directory
 WORKDIR /var/www/html
